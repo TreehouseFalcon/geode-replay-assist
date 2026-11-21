@@ -1,0 +1,37 @@
+{
+	"geode": "6.0.0-beta.1",
+	"gd": {
+		"win": "2.2091",
+		"android": "2.2091",
+		"mac": "2.2091",
+		"ios": "2.2091"
+	},
+	"id": "treehousefalcon.replay-recall-assist",
+	"name": "Replay Recall Assist",
+	"version": "v0.1.0",
+	"developer": "TreehouseFalcon",
+	"description": "Know when a level has recall/replay available",
+	"tags": [
+		"enhancement",
+		"gameplay",
+		"interface",
+		"online",
+		"utility"
+	],
+	"settings": {
+		"show-recall-indicator": {
+			"name": "show recall indicator",
+			"description": "When to show an indicator on the recall assist button",
+			"type": "string",
+			"one-of": [
+				"always",
+				"uncleared",
+				"never"
+			],
+			"default": "uncleared"
+		}
+	},
+	"dependencies": {
+		"geode.node-ids": ">=1.24.0-beta.1"
+	}
+}

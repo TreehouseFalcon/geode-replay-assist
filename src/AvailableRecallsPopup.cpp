@@ -1,0 +1,348 @@
+#include "utils/NetUtils.hpp"
+#include "AvailableRecallsPopup.hpp"
+#include "utils/Utils.hpp"
+#include <Geode/ui/Label.hpp>
+#include <Geode/ui/ProgressBar.hpp>
+#include <Geode/ui/LoadingSpinner.hpp>
+#include <Geode/binding/GameLevelManager.hpp>
+#include <Geode/binding/GameManager.hpp>
+#include <Geode/binding/GameStatsManager.hpp>
+#include <Geode/binding/GJGameLevel.hpp>
+#include <Geode/binding/LevelInfoLayer.hpp>
+#include <Geode/binding/CCSpriteGrayscale.hpp>
+#include <optional>
+#include <algorithm>
+
+CCNode* AvailableRecallsPopup::createAvailableRecallContainer(LevelCategory levelCategory, std::optional<GauntletType> gauntlet, int timedID) {
+    // Gauntlet containers require a specific gauntlet, other categories don't //
+    if (levelCategory == LevelCategory::Gauntlet && !gauntlet) return nullptr;
+
+    bool isTimed = levelCategory == LevelCategory::Daily || levelCategory == LevelCategory::Weekly || levelCategory == LevelCategory::Event;
+    if (isTimed && timedID <= 0) return nullptr;
+
+    const char* categoryName = "online";
+    switch (levelCategory) {
+        case LevelCategory::Daily: categoryName = "daily"; break;
+        case LevelCategory::Weekly: categoryName = "weekly"; break;
+        case LevelCategory::Event: categoryName = "event"; break;
+        case LevelCategory::Gauntlet: categoryName = "gauntlet"; break;
+        case LevelCategory::Default: break;
+    }
+    auto label = geode::Label::create(categoryName, "bigFont.fnt");
+    label->setScale(0.5f);
+    if (label->getContentSize().width * label->getScale() > 80.f) {
+        label->setScale(80.f / label->getContentSize().width);
+    }
+
+    auto spriteName = Utils::getRecallSpriteName(levelCategory, gauntlet);
+    bool completed = Utils::isRecallVariantCompleted(m_level->m_levelID.value(), levelCategory, timedID);
+#if defined(GEODE_IS_IOS) || defined(GEODE_IS_MACOS)
+    CCSprite* sprite = CCSprite::createWithSpriteFrameName(spriteName.c_str());
+#else
+    CCSprite* sprite = completed
+        ? CCSpriteGrayscale::createWithSpriteFrameName(spriteName)
+        : CCSprite::createWithSpriteFrameName(spriteName.c_str());
+#endif
+    if (completed) {
+        sprite->setColor({128, 128, 128});
+    }
+    sprite->setScale(0.75);
+
+    auto playSprite = Utils::createRecallPlaySprite();
+    // Reserve the same space for both play and lock icons //
+    auto buttonSize = playSprite->getContentSize() * playSprite->getScale();
+    bool locked = (isTimed && !Utils::isTimedRecallUnlocked(timedID)) ||
+        (levelCategory == LevelCategory::Gauntlet && !Utils::isGauntletRecallUnlocked(m_level, *gauntlet));
+    if (locked) {
+        playSprite = CCSprite::createWithSpriteFrameName("GJLargeLock_001.png");
+        playSprite->setScale(buttonSize.height / playSprite->getContentSize().height);
+    }
+
+    auto playButton = CCMenuItemSpriteExtra::create(
+        playSprite, this, menu_selector(AvailableRecallsPopup::onPlayRecall));
+    playButton->setTag(levelCategory == LevelCategory::Gauntlet ? static_cast<int>(*gauntlet) : timedID);
+    playButton->setUserObject(CCInteger::create(static_cast<int>(levelCategory)));
+    auto playMenu = CCMenu::create();
+    playMenu->ignoreAnchorPointForPosition(false);
+    playMenu->setContentSize(buttonSize);
+    playButton->setPosition({buttonSize.width / 2.f, buttonSize.height / 2.f});
+    playMenu->addChild(playButton);
+
+    constexpr float containerWidth = 90.f;
+    auto bounds = Utils::getSpriteVisibleBounds(sprite);
+    float spriteSlotHeight = bounds.size.height * sprite->getScaleY();
+    constexpr float gap = 2.f;
+    auto spriteSlot = CCNode::create();
+    spriteSlot->setAnchorPoint({0.5f, 0.5f});
+    spriteSlot->setContentSize({containerWidth, spriteSlotHeight});
+    sprite->setAnchorPoint({0.f, 0.f});
+    sprite->setPosition({
+        containerWidth / 2.f - bounds.getMidX() * sprite->getScaleX(),
+        -bounds.getMinY() * sprite->getScaleY()
+    });
+    spriteSlot->addChild(sprite);
+    if (completed) {
+        CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("GJ_GameSheet03.plist");
+        auto completedIcon = CCSprite::createWithSpriteFrameName("GJ_completesIcon_001.png");
+        completedIcon->setPosition({containerWidth / 2.f, spriteSlotHeight / 2.f});
+        spriteSlot->addChild(completedIcon, 1);
+    }
+
+    auto labelSize = label->getContentSize() * label->getScale();
+    constexpr float buttonOffsetFromTop = 90.f;
+    constexpr float progressBarWidth = containerWidth - 3;
+    constexpr float progressBarHeight = 6.f;
+    constexpr float progressBarGap = 5.f;
+    constexpr float bottomPadding = 3.f;
+    float containerHeight = buttonOffsetFromTop + buttonSize.height / 2.f +
+        progressBarGap + progressBarHeight + bottomPadding;
+    auto container = CCNode::create();
+    container->setContentSize({containerWidth, containerHeight});
+
+    // Keep the artwork in a vertical layout, independently of the button position //
+    auto artwork = CCNode::create();
+    artwork->setContentSize({containerWidth, labelSize.height + spriteSlotHeight + gap});
+    artwork->setAnchorPoint({0.5f, 1.f});
+    artwork->setPosition({containerWidth / 2.f, containerHeight});
+    artwork->addChild(label);
+    artwork->addChild(spriteSlot);
+    artwork->setLayout(ColumnLayout::create()
+        ->setAxisReverse(true)
+        ->setAxisAlignment(AxisAlignment::Center)
+        ->setCrossAxisAlignment(AxisAlignment::Center)
+        ->setCrossAxisLineAlignment(AxisAlignment::Center)
+        ->setCrossAxisOverflow(false)
+        ->setAutoScale(false)
+        ->setGap(gap));
+    container->addChild(artwork);
+
+    playMenu->setPosition({containerWidth / 2.f, containerHeight - buttonOffsetFromTop});
+    container->addChild(playMenu);
+
+    int progress = Utils::getRecallProgress(m_level, levelCategory, timedID);
+    auto progressBar = geode::ProgressBar::create(static_cast<float>(progress), geode::ProgressBar::Style::Solid);
+    progressBar->setAnchorPoint({0.5f, 0.5f});
+    progressBar->setScaleX(progressBarWidth / progressBar->getContentSize().width);
+    progressBar->setScaleY(progressBarHeight / progressBar->getContentSize().height);
+    progressBar->setFillColor({0, 255, 0});
+    progressBar->setPosition({containerWidth / 2.f, bottomPadding + progressBarHeight / 2.f});
+    container->addChild(progressBar);
+
+    auto progressLabel = geode::Label::create(fmt::format("{}%", progress), "bigFont.fnt");
+    progressLabel->setScale(0.2f);
+    progressLabel->setPosition(progressBar->getPosition());
+    container->addChild(progressLabel, 1);
+    return container;
+}
+
+bool AvailableRecallsPopup::init(GJGameLevel* level) {
+    if (!level) {
+        return false;
+    }
+    if (!Popup::init(320.f, 170.f)) {
+        return false;
+    }
+    m_level = level;
+
+    setTitle("replays available");
+
+    auto body = CCNode::create();
+    body->setID("available-recalls-popup"_spr);
+    body->setAnchorPoint({0.5f, 0.5f});
+    body->setContentSize({m_size.width - 40.f, m_size.height - 60.f});
+    body->setPosition({m_size.width / 2.f, m_size.height / 2.f - 15.f});
+    m_mainLayer->addChild(body);
+
+    std::vector<Utils::RecallOption> availableRecallOptions = Utils::getAvailableRecallOptions(level);
+    for (auto const& option : availableRecallOptions) {
+        body->addChild(createAvailableRecallContainer(option.category, option.gauntlet, option.timedID));
+    }
+
+    body->setLayout(RowLayout::create()
+        ->setAxisAlignment(AxisAlignment::Center)
+        ->setCrossAxisAlignment(AxisAlignment::End)
+        ->setCrossAxisLineAlignment(AxisAlignment::End)
+        ->setGap(12.f));
+
+    return true;
+}
+
+AvailableRecallsPopup* AvailableRecallsPopup::create(GJGameLevel* level) {
+    auto popup = new AvailableRecallsPopup();
+    if (popup->init(level)) {
+        popup->autorelease();
+        return popup;
+    }
+
+    delete popup;
+    return nullptr;
+}
+
+void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
+    if (m_pendingTimedID != 0 || m_pendingGauntlet || m_pendingOnline || (m_unlockPopup && m_unlockPopup->getParent())) return;
+
+    auto button = static_cast<CCMenuItemSpriteExtra*>(sender);
+    auto category = static_cast<LevelCategory>(static_cast<CCInteger*>(button->getUserObject())->getValue());
+    bool isGauntlet = category == LevelCategory::Gauntlet;
+    bool isOnline = category == LevelCategory::Default;
+    int timedID = isGauntlet || isOnline ? 0 : button->getTag();
+    auto gauntlet = isGauntlet ? std::optional(static_cast<GauntletType>(button->getTag())) : std::nullopt;
+    int levelID = m_level->m_levelID.value();
+
+    if (isGauntlet) {
+        auto const& gauntlets = NetUtils::getGauntletsForLevel(levelID);
+        if (std::find(gauntlets.begin(), gauntlets.end(), *gauntlet) == gauntlets.end()) {
+            geode::createQuickPopup("Recall unavailable", "This level was <cy>not found</c> in the selected gauntlet", "OK");
+            return;
+        }
+        if (!Utils::isGauntletRecallUnlocked(m_level, *gauntlet)) {
+            geode::createQuickPopup("Level locked", "You have not <cy>discovered</c> this gauntlet level yet", "OK");
+            return;
+        }
+    } else if (!isOnline) {
+        auto const& recalls = NetUtils::getSafeRecallEntries();
+        auto found = recalls.find(levelID);
+        if (found == recalls.end() || std::none_of(found->second.begin(), found->second.end(),
+            [timedID, category](auto const& entry) { return entry.timedID == timedID && entry.levelCategory == category; })) {
+            geode::createQuickPopup("Recall unavailable", "This timed appearance was not found in <cl>The Safe</c> cache for this level", "OK");
+            return;
+        }
+        if (!Utils::isTimedRecallUnlocked(timedID)) {
+            int price = GameStatsManager::dailyRecallPrice(timedID);
+            m_unlockPopup = geode::createQuickPopup("Unlock Recall",
+                fmt::format("Unlock this recall for {} demon key{}?", price, price == 1 ? "" : "s"),
+                "Cancel", "Unlock", [timedID, button = Ref(button)](auto, bool confirmed) {
+                    if (!confirmed) return;
+                    if (!Utils::unlockTimedRecall(timedID)) {
+                        geode::createQuickPopup("Not enough keys", "You need more demon keys to unlock this recall.", "OK");
+                        return;
+                    }
+                    button->setSprite(Utils::createRecallPlaySprite());
+                });
+            return;
+        }
+    }
+
+    auto manager = GameLevelManager::sharedState();
+    auto savedLevel = isGauntlet ? Utils::getSavedGauntletLevel(levelID) :
+        isOnline ? manager->getSavedLevel(levelID) : manager->getSavedDailyLevel(timedID);
+    auto matches = [&](GJGameLevel* level) {
+        return level && level->m_levelID.value() == levelID &&
+            level->m_dailyID.value() == timedID && level->m_gauntletLevel == isGauntlet;
+    };
+    for (auto level : {savedLevel, m_level.data()}) {
+        if (matches(level)) {
+            openRecall(level, gauntlet);
+            return;
+        }
+    }
+
+    m_pendingTimedID = timedID;
+    m_pendingGauntlet = isGauntlet;
+    m_pendingOnline = isOnline;
+    m_pendingGauntletType = gauntlet;
+    m_previousDownloadDelegate = manager->m_levelDownloadDelegate;
+    manager->m_levelDownloadDelegate = this;
+    showDownloadIndicator(button);
+    manager->downloadLevel(levelID, isGauntlet, timedID);
+}
+
+void AvailableRecallsPopup::clearUnlockPrompt() {
+    auto popup = m_unlockPopup;
+    m_unlockPopup = nullptr;
+    if (popup) popup->removeFromParentAndCleanup(true);
+}
+
+void AvailableRecallsPopup::showDownloadIndicator(CCMenuItemSpriteExtra* button) {
+    if (!button || !button->getParent()) return;
+    auto spinner = geode::LoadingSpinner::create(button->getContentSize().height);
+    if (!spinner) return;
+
+    m_downloadButton = button;
+    m_downloadSpinner = spinner;
+    spinner->setPosition(button->getPosition());
+    button->getParent()->addChild(spinner, button->getZOrder() + 1);
+    button->setVisible(false);
+    button->setEnabled(false);
+}
+
+void AvailableRecallsPopup::clearDownloadIndicator() {
+    if (m_downloadSpinner) m_downloadSpinner->removeFromParent();
+    if (m_downloadButton) {
+        m_downloadButton->setVisible(true);
+        m_downloadButton->setEnabled(true);
+    }
+    m_downloadSpinner = nullptr;
+    m_downloadButton = nullptr;
+}
+
+void AvailableRecallsPopup::restoreDownloadDelegate() {
+    clearDownloadIndicator();
+    auto manager = GameLevelManager::sharedState();
+    if (manager->m_levelDownloadDelegate == this) {
+        manager->m_levelDownloadDelegate = m_previousDownloadDelegate;
+    }
+    m_previousDownloadDelegate = nullptr;
+    m_pendingTimedID = 0;
+    m_pendingGauntlet = false;
+    m_pendingOnline = false;
+    m_pendingGauntletType.reset();
+}
+
+AvailableRecallsPopup::~AvailableRecallsPopup() {
+    clearUnlockPrompt();
+    restoreDownloadDelegate();
+}
+
+void AvailableRecallsPopup::onClose(CCObject* sender) {
+    clearUnlockPrompt();
+    restoreDownloadDelegate();
+    Popup::onClose(sender);
+}
+
+void AvailableRecallsPopup::openRecall(GJGameLevel* level, std::optional<GauntletType> gauntlet) {
+    auto game = GameManager::sharedState();
+    int previousGauntlet = game->m_currentGauntlet;
+
+    // LevelInfoLayer::onBack rebuilds GauntletLayer from this value //
+    if (level->m_gauntletLevel && gauntlet) {
+        game->m_currentGauntlet = static_cast<int>(*gauntlet);
+    }
+
+    auto scene = LevelInfoLayer::scene(level, false);
+    if (!scene) {
+        game->m_currentGauntlet = previousGauntlet;
+        return;
+    }
+
+    if (auto layer = scene->getChildByType<LevelInfoLayer>(0)) {
+        markRecallPage(layer);
+        if (level->m_gauntletLevel && gauntlet) {
+            markGauntletRecallReturn(layer, previousGauntlet);
+        }
+    }
+
+    onClose(nullptr);
+    CCDirector::sharedDirector()->pushScene(CCTransitionFade::create(0.5f, scene));
+}
+
+void AvailableRecallsPopup::levelDownloadFinished(GJGameLevel* level) {
+    bool hasPendingDownload = m_pendingGauntlet || m_pendingOnline || m_pendingTimedID > 0;
+    int expectedTimedID = m_pendingGauntlet || m_pendingOnline ? 0 : m_pendingTimedID;
+    bool matches = level && hasPendingDownload &&
+        level->m_levelID.value() == m_level->m_levelID.value() &&
+        level->m_gauntletLevel == m_pendingGauntlet &&
+        level->m_dailyID.value() == expectedTimedID;
+    auto gauntlet = m_pendingGauntletType;
+    restoreDownloadDelegate();
+    if (matches) {
+        openRecall(level, gauntlet);
+    } else {
+        geode::createQuickPopup("Recall unavailable", "Could not load the requested recall variant", "OK");
+    }
+}
+
+void AvailableRecallsPopup::levelDownloadFailed(int) {
+    restoreDownloadDelegate();
+    geode::createQuickPopup("Download failed", "Unable to download the recall variant. Please try again.", "OK");
+}
