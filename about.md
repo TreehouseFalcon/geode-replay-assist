@@ -16,3 +16,4 @@ Supported recall variants include:
 
 - [dominokiddoo](user:13948595) for the mod icon
 - [Koobi](user:8313718) for testing and <cy>waga</c>
+- [RayDeeUx](user:1941705) for testing
