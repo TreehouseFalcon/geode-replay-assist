@@ -14,5 +14,5 @@ Supported recall variants include:
 
 ### Credits
 
-- [dominokiddoo](user:71) for the mod icon
+- [dominokiddoo](user:13948595) for the mod icon
 - [Koobi](user:8313718) for testing and <cy>waga</c>
