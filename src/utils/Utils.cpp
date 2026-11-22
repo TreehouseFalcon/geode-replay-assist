@@ -74,8 +74,15 @@ namespace Utils {
 
     bool isTimedRecallUnlocked(int timedID) {
         if (timedID <= 0) return false;
+
+        // The current timed appearance is free, only older recalls require keys //
+        auto manager = GameLevelManager::sharedState();
+        int offset = timedID > 200000 ? 200000 : timedID > 100000 ? 100000 : 0;
+        int currentID = offset == 200000 ? manager->m_currentEventID :
+            offset == 100000 ? manager->m_currentWeeklyID : manager->m_currentDailyID;
+        if (currentID > 0 && timedID == offset + currentID % 100000) return true;
+
         auto stats = GameStatsManager::sharedState();
-        // Match The Safe's View/Unlock rule for this specific timed appearance.
         return stats->isDailyRecall(timedID) || stats->hasCompletedDailyStars(timedID);
     }
 
@@ -84,10 +91,11 @@ namespace Utils {
         if (isTimedRecallUnlocked(timedID)) return true;
         auto stats = GameStatsManager::sharedState();
         int price = GameStatsManager::dailyRecallPrice(timedID);
-        int keys = stats->getStat("21");
+        auto keyStat = std::to_string(static_cast<int>(StatKey::Keys));
+        int keys = stats->getStat(keyStat.c_str());
         if (keys < price) return false;
         // Match the game's recall purchase; unlockDailyRecall has no Windows binding.
-        stats->setStat("21", keys - price);
+        stats->setStat(keyStat.c_str(), keys - price);
         stats->m_unlockedTimelyLevels->setObject(
             CCString::createWithFormat("%i", price), std::to_string(timedID));
         return true;
