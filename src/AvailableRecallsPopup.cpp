@@ -36,13 +36,9 @@ CCNode* AvailableRecallsPopup::createAvailableRecallContainer(LevelCategory leve
 
     auto spriteName = Utils::getRecallSpriteName(levelCategory, gauntlet);
     bool completed = Utils::isRecallVariantCompleted(m_level->m_levelID.value(), levelCategory, timedID);
-#if defined(GEODE_IS_IOS) || defined(GEODE_IS_MACOS)
-    CCSprite* sprite = CCSprite::createWithSpriteFrameName(spriteName.c_str());
-#else
     CCSprite* sprite = completed
         ? CCSpriteGrayscale::createWithSpriteFrameName(spriteName)
         : CCSprite::createWithSpriteFrameName(spriteName.c_str());
-#endif
     if (completed) {
         sprite->setColor({128, 128, 128});
     }

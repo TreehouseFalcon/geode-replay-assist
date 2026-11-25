@@ -26,10 +26,3 @@ endif()
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 
 setup_geode_mod(${PROJECT_NAME})
-
-if (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND /usr/bin/codesign --force --sign - "$<TARGET_FILE:${PROJECT_NAME}>"
-        VERBATIM
-    )
-endif()

@@ -1,5 +1,5 @@
 {
-	"geode": "6.0.0-beta.1",
+	"geode": "6.0.0",
 	"gd": {
 		"win": "2.2091",
 		"android": "2.2091",
@@ -8,7 +8,7 @@
 	},
 	"id": "treehousefalcon.replay-recall-assist",
 	"name": "Replay Recall Assist",
-	"version": "v0.1.1",
+	"version": "v0.1.2",
 	"developer": "TreehouseFalcon",
 	"description": "Know when a level has recall/replay available",
 	"tags": [
