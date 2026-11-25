@@ -2,9 +2,6 @@ cmake_minimum_required(VERSION 3.21)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-
-# Match the game's shared release CRT even when building with debug symbols.
-# Game-owned std::string allocations cross the mod's DLL boundary.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 project(RecallAssist VERSION 1.0.0)
