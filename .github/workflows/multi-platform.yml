@@ -39,3 +39,4 @@ jobs:
       - uses: geode-sdk/build-geode-mod-docker/merge@v1
         with:
           upload: true
+          upload-zip: true
