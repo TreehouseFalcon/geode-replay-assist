@@ -186,7 +186,7 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
     int levelID = m_level->m_levelID.value();
 
     if (isGauntlet) {
-        auto const& gauntlets = NetUtils::getGauntletsForLevel(levelID);
+        auto gauntlets = Utils::getGauntletsForLevel(levelID);
         if (std::find(gauntlets.begin(), gauntlets.end(), *gauntlet) == gauntlets.end()) {
             geode::createQuickPopup("Recall unavailable", "This level was <cy>not found</c> in the selected gauntlet", "OK");
             return;

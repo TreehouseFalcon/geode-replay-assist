@@ -4,7 +4,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-enum class GauntletType;
 
 namespace NetUtils {
 struct SafeRecallEntry {
@@ -21,13 +20,10 @@ struct SafeRecallEntry {
 
 // Populated asynchronously on mod load. Access from main thread. //
 using SafeRecallCache = std::unordered_map<int, std::vector<SafeRecallEntry>>;
-using GauntletRecallCache = std::unordered_map<int, std::vector<GauntletType>>;
 
+void loadGauntletRecallEntries();
 SafeRecallCache const& getSafeRecallEntries();
 bool isSafeRecallDataLoaded();
 std::optional<int> getTimedIDForLevel(int levelID, std::optional<LevelCategory> category = std::nullopt);
-std::vector<GauntletType> const& getGauntletsForLevel(int levelID);
-std::vector<int> const& getLevelsForGauntlet(GauntletType gauntlet);
-bool isGauntletRecallDataLoaded();
 
 }

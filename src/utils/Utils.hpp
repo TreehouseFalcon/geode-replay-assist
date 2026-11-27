@@ -30,6 +30,7 @@ namespace Utils {
     // Returns false if the ID is invalid or unlock cannot be afforded //
     bool unlockTimedRecall(int timedID);
 
+    std::vector<GauntletType> getGauntletsForLevel(int levelID);
     GJGameLevel* getSavedGauntletLevel(int levelID);
     bool isGauntletRecallUnlocked(GJGameLevel* sourceLevel, GauntletType gauntlet);
     int getRecallProgress(GJGameLevel* sourceLevel, LevelCategory category, int timedID = 0);

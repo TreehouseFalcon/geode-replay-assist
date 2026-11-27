@@ -23,6 +23,25 @@ namespace Utils {
     #endif
     }
 
+    std::vector<GauntletType> getGauntletsForLevel(int levelID) {
+        auto packs = GameLevelManager::sharedState()->m_savedGauntlets;
+        std::vector<GauntletType> gauntlets;
+
+        for (auto [key, pack] : CCDictionaryExt<std::string_view, GJMapPack*, false>(packs)) {
+            if (!pack->m_levels) continue;
+
+            for (auto level : CCArrayExt<CCString*>(pack->m_levels)) {
+                if (level->intValue() == levelID) {
+                    gauntlets.push_back(static_cast<GauntletType>(pack->m_packID));
+                    break;
+                }
+            }
+        }
+
+        std::ranges::sort(gauntlets); // present available gauntlets in the same order they're shown in the game
+        return gauntlets;
+    }
+
     CCSprite* createRecallPlaySprite() {
         auto sprite = CCSprite::createWithSpriteFrameName("GJ_playBtn2_001.png");
         sprite->setScale(0.4f);
@@ -56,7 +75,7 @@ namespace Utils {
             }
         }
         if (!level->m_gauntletLevel) {
-            for (auto gauntlet : NetUtils::getGauntletsForLevel(levelID)) {
+            for (auto gauntlet : getGauntletsForLevel(levelID)) {
                 options.push_back({LevelCategory::Gauntlet, 0, gauntlet});
             }
         }
@@ -109,24 +128,16 @@ namespace Utils {
         if (gauntlet == GauntletType::Demon && !stats->isItemUnlocked(UnlockType::GJItem, DEMON_GAUNTLET_KEY_ITEM_ID)) return false;
 
         int levelID = sourceLevel->m_levelID.value();
-        std::vector<int> levels;
+        // A clear means this variant is never locked //
+        if (isRecallVariantCompleted(levelID, LevelCategory::Gauntlet)) return true;
+
         auto manager = GameLevelManager::sharedState();
-        int gauntletID = static_cast<int>(gauntlet);
-    #if defined(GEODE_IS_IOS) || defined(GEODE_IS_MACOS)
-        // Mimic getSavedGauntlet which has no iOS or macOS binding //
-        auto saved = static_cast<GJMapPack*>(manager->m_savedGauntlets->objectForKey(std::to_string(gauntletID)));
-    #else
-        auto saved = manager->getSavedGauntlet(gauntletID);
-    #endif
-        if (saved && saved->m_levels && saved->m_levels->count() > 0) {
-            // Prefer the game's current order over the sheet, which can list former members //
-            for (auto entry : CCArrayExt<CCString*>(saved->m_levels)) {
-                levels.push_back(entry->intValue());
-            }
-        } else {
-            levels = NetUtils::getLevelsForGauntlet(gauntlet);
-        }
-        for (int id : levels) {
+        auto key = manager->getGauntletKey(static_cast<int>(gauntlet));
+        auto pack = static_cast<GJMapPack*>(manager->m_savedGauntlets->objectForKey(key));
+        if (!pack || !pack->m_levels) return false;
+
+        for (auto level : CCArrayExt<CCString*>(pack->m_levels)) {
+            int id = level->intValue();
             if (id == levelID) return true;
             if (!isRecallVariantCompleted(id, LevelCategory::Gauntlet)) return false;
         }
@@ -140,22 +151,10 @@ namespace Utils {
             case LevelCategory::Weekly:
             case LevelCategory::Event:
                 return timedID > 0 && stats->hasCompletedDailyStars(timedID);
-    #if defined(GEODE_IS_IOS) || defined(GEODE_IS_MACOS)
-            case LevelCategory::Gauntlet:
-            case LevelCategory::Default: {
-                auto manager = GameLevelManager::sharedState();
-                bool gauntlet = category == LevelCategory::Gauntlet;
-                auto level = gauntlet ? Utils::getSavedGauntletLevel(levelID) : manager->getSavedLevel(levelID);
-                return level && level->m_dailyID.value() == 0 && level->m_gauntletLevel == gauntlet &&
-                    stats->hasCompletedLevel(level);
-            }
-    #else
-            // Bindings not available for iOS/macOS, keep the split and replace with this when available //
             case LevelCategory::Gauntlet:
                 return stats->hasCompletedGauntletLevel(levelID);
             case LevelCategory::Default:
                 return stats->hasCompletedOnlineLevel(levelID);
-    #endif
         }
         return false;
     }
