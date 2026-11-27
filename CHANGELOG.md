@@ -1,4 +1,4 @@
-# v0.1.3
+# v0.2.0
 
 ### If you did not see the Recall Assist button on level pages within the last few days, this was due to an error in the Death Tracker mod that hid the button for this mod. This issue has been resolved.
 
