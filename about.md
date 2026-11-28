@@ -10,7 +10,7 @@ Supported recall variants include:
 - <cr>Gauntlet</c>
 - General version of a level (only if playing one of the variants)
 
-**NOTE**: because of how the All Rated Levels spreadsheet is updated, this mod will not be able to show recall variants for levels that have not been added. This includes recently-minted Daily, Weekly, Event levels, as well as recently released Gauntlets.
+**NOTE**: because of how the All Rated Levels spreadsheet is updated, this mod will not be able to show recall variants for levels that have not been added to the sheet. This may include daily, weekly, and event levels that were released over 9 days ago, as well as recently released gauntlets.
 
 ### Credits
 

@@ -7,7 +7,7 @@
 
 ## v0.2.0
 
-### If you did not see the Recall Assist button on level pages within the last few days, this was due to an error in the Death Tracker mod that hid the button for this mod. This issue has been resolved.
+### <cr>If you did not see the Recall Assist button on level pages within the last few days, this was due to an error in the Death Tracker mod that hid the button for this mod. This issue has been resolved.</c>
 
 - Levels that are part of gauntlets that had replacements in the past now correctly let you access the gauntlet variant
 
