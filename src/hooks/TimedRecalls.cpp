@@ -77,7 +77,8 @@ class $modify(RecallAssistTimedLevelManager, GameLevelManager) {
         // If we're not searching then don't do anything //
         auto search = s_pendingSearches.extract(tag);
         if (search.empty()) {
-            GameLevelManager::handleIt(success, std::move(response), std::move(tag), type);
+            GameLevelManager::handleIt(success, std::move(response), tag, type);
+            NetUtils::OnlineLevelSearchFinishedEvent(std::move(tag)).send();
             return;
         }
 

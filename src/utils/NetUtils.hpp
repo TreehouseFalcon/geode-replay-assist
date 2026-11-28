@@ -29,6 +29,10 @@ enum class InitialRecallLoad {
 // Sent on the game thread 10 seconds after each startup fetch has processed its result.
 struct InitialRecallLoadSettledEvent : geode::Event<InitialRecallLoadSettledEvent, bool()> {};
 
+struct OnlineLevelSearchFinishedEvent : geode::Event<OnlineLevelSearchFinishedEvent, bool(), std::string> {
+    using Event::Event;
+};
+
 bool areInitialRecallLoadsSettled();
 void settleInitialRecallLoad(InitialRecallLoad load);
 

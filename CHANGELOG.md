@@ -4,6 +4,7 @@
 - There is now a loading indicator displayed if some resources are still being loaded to determine the full set of available recalls for a level
 - Renamed "Online" recall variant to "Browse"
 - Undiscovered gauntlet variants render the same sprite to prevent spoilers
+- Fixed issue where level creator name was left unloaded when switching from timed -> browse variant
 
 ## v0.2.0
 

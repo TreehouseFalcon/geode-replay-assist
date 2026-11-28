@@ -8,6 +8,7 @@
 #include <Geode/binding/GameManager.hpp>
 #include <Geode/binding/GameStatsManager.hpp>
 #include <Geode/binding/GJGameLevel.hpp>
+#include <Geode/binding/GJSearchObject.hpp>
 #include <Geode/binding/LevelInfoLayer.hpp>
 #include <Geode/binding/CCSpriteGrayscale.hpp>
 #include <optional>
@@ -185,13 +186,18 @@ AvailableRecallsPopup* AvailableRecallsPopup::create(GJGameLevel* level) {
 }
 
 void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
-    if (m_pendingTimedID != 0 || m_pendingGauntlet || m_pendingOnline || (m_unlockPopup && m_unlockPopup->getParent())) return;
+    if (m_pendingTimedID != 0 || m_pendingGauntlet || getEventListener("online-recall-search"_spr) ||
+        (m_unlockPopup && m_unlockPopup->getParent())) return;
 
     auto button = static_cast<CCMenuItemSpriteExtra*>(sender);
     auto category = static_cast<LevelCategory>(static_cast<CCInteger*>(button->getUserObject())->getValue());
+    if (category == LevelCategory::Default) {
+        loadOnlineRecall(button);
+        return;
+    }
+
     bool isGauntlet = category == LevelCategory::Gauntlet;
-    bool isOnline = category == LevelCategory::Default;
-    int timedID = isGauntlet || isOnline ? 0 : button->getTag();
+    int timedID = isGauntlet ? 0 : button->getTag();
     auto gauntlet = isGauntlet ? std::optional(static_cast<GauntletType>(button->getTag())) : std::nullopt;
     int levelID = m_level->m_levelID.value();
 
@@ -205,7 +211,7 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
             geode::createQuickPopup("Level locked", "You have not <cy>discovered</c> this <co>gauntlet level</c> yet", "OK");
             return;
         }
-    } else if (!isOnline) {
+    } else {
         auto const& recalls = NetUtils::getSafeRecallEntries();
         auto found = recalls.find(levelID);
         if (found == recalls.end() || std::none_of(found->second.begin(), found->second.end(),
@@ -230,8 +236,7 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
     }
 
     auto manager = GameLevelManager::sharedState();
-    auto savedLevel = isGauntlet ? Utils::getSavedGauntletLevel(levelID) :
-        isOnline ? manager->getSavedLevel(levelID) : manager->getSavedDailyLevel(timedID);
+    auto savedLevel = isGauntlet ? Utils::getSavedGauntletLevel(levelID) : manager->getSavedDailyLevel(timedID);
     auto matches = [&](GJGameLevel* level) {
         return level && level->m_levelID.value() == levelID &&
             level->m_dailyID.value() == timedID && level->m_gauntletLevel == isGauntlet;
@@ -245,12 +250,45 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
 
     m_pendingTimedID = timedID;
     m_pendingGauntlet = isGauntlet;
-    m_pendingOnline = isOnline;
     m_pendingGauntletType = gauntlet;
     m_previousDownloadDelegate = manager->m_levelDownloadDelegate;
     manager->m_levelDownloadDelegate = this;
     showDownloadIndicator(button);
     manager->downloadLevel(levelID, isGauntlet, timedID);
+}
+
+void AvailableRecallsPopup::loadOnlineRecall(CCMenuItemSpriteExtra* button) {
+    auto manager = GameLevelManager::sharedState();
+    int levelID = m_level->m_levelID.value();
+    auto query = GJSearchObject::create(SearchType::Search, std::to_string(levelID));
+    std::string key = query->getKey();
+
+    auto findLevel = [manager, levelID, key](bool searchFinished) -> GJGameLevel* {
+        auto hasCreator = [manager](GJGameLevel* level) {
+            int userID = level->m_userID.value();
+            if (level->m_accountID.value() <= 0 && manager->accountIDForUserID(userID) <= 0) return false;
+            if (level->m_creatorName.empty()) level->m_creatorName = manager->userNameForUserID(userID);
+            return !level->m_creatorName.empty();
+        };
+        auto saved = manager->getSavedLevel(levelID);
+        if (saved && hasCreator(saved)) return saved;
+        if (auto levels = manager->getStoredOnlineLevels(key.c_str())) {
+            for (auto level : CCArrayExt<GJGameLevel*>(levels)) {
+                if (level->m_levelID.value() == levelID && (searchFinished || hasCreator(level))) return level;
+            }
+        }
+        return searchFinished ? saved : nullptr;
+    };
+
+    if (auto level = findLevel(false)) return openRecall(level);
+    showDownloadIndicator(button);
+    this->addEventListener("online-recall-search"_spr, NetUtils::OnlineLevelSearchFinishedEvent(key), [this, findLevel] {
+        removeEventListener("online-recall-search"_spr);
+        clearDownloadIndicator();
+        if (auto level = findLevel(true)) return openRecall(level);
+        geode::createQuickPopup("Recall unavailable", "Could not load the online level. Please try again.", "OK");
+    });
+    manager->getOnlineLevels(query);
 }
 
 void AvailableRecallsPopup::clearUnlockPrompt() {
@@ -291,7 +329,6 @@ void AvailableRecallsPopup::restoreDownloadDelegate() {
     m_previousDownloadDelegate = nullptr;
     m_pendingTimedID = 0;
     m_pendingGauntlet = false;
-    m_pendingOnline = false;
     m_pendingGauntletType.reset();
 }
 
@@ -301,6 +338,7 @@ AvailableRecallsPopup::~AvailableRecallsPopup() {
 }
 
 void AvailableRecallsPopup::onClose(CCObject* sender) {
+    removeEventListener("online-recall-search"_spr);
     clearUnlockPrompt();
     restoreDownloadDelegate();
     Popup::onClose(sender);
@@ -333,12 +371,11 @@ void AvailableRecallsPopup::openRecall(GJGameLevel* level, std::optional<Gauntle
 }
 
 void AvailableRecallsPopup::levelDownloadFinished(GJGameLevel* level) {
-    bool hasPendingDownload = m_pendingGauntlet || m_pendingOnline || m_pendingTimedID > 0;
-    int expectedTimedID = m_pendingGauntlet || m_pendingOnline ? 0 : m_pendingTimedID;
+    bool hasPendingDownload = m_pendingGauntlet || m_pendingTimedID > 0;
     bool matches = level && hasPendingDownload &&
         level->m_levelID.value() == m_level->m_levelID.value() &&
         level->m_gauntletLevel == m_pendingGauntlet &&
-        level->m_dailyID.value() == expectedTimedID;
+        level->m_dailyID.value() == m_pendingTimedID;
     auto gauntlet = m_pendingGauntletType;
     restoreDownloadDelegate();
     if (matches) {

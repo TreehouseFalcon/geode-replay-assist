@@ -16,7 +16,6 @@ class AvailableRecallsPopup : public Popup, public LevelDownloadDelegate {
         LevelDownloadDelegate* m_previousDownloadDelegate = nullptr;
         int m_pendingTimedID = 0;
         bool m_pendingGauntlet = false;
-        bool m_pendingOnline = false;
         std::optional<GauntletType> m_pendingGauntletType;
         Ref<FLAlertLayer> m_unlockPopup;
         Ref<CCMenuItemSpriteExtra> m_downloadButton;
@@ -26,6 +25,7 @@ class AvailableRecallsPopup : public Popup, public LevelDownloadDelegate {
         ~AvailableRecallsPopup() override;
         CCNode* createAvailableRecallContainer(LevelCategory category, std::optional<GauntletType> gauntlet, int timedID);
         void openRecall(GJGameLevel* level, std::optional<GauntletType> gauntlet = std::nullopt);
+        void loadOnlineRecall(CCMenuItemSpriteExtra* button);
         void restoreDownloadDelegate();
         void clearUnlockPrompt();
         void showDownloadIndicator(CCMenuItemSpriteExtra* button);
