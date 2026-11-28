@@ -95,24 +95,40 @@ namespace Utils {
         return LEVEL_CATEGORY_TO_SPRITE.at(category);
     }
 
-    bool isTimedRecallUnlocked(int timedID) {
-        if (timedID <= 0) return false;
+    TimedRecallAccess getTimedRecallAccess(int timedID) {
+        if (timedID <= 0) return TimedRecallAccess::Unavailable;
 
-        // The current timed appearance is free, only older recalls require keys //
         auto manager = GameLevelManager::sharedState();
         int offset = timedID > EVENT_TIMED_ID_OFFSET ? EVENT_TIMED_ID_OFFSET :
             timedID > WEEKLY_TIMED_ID_OFFSET ? WEEKLY_TIMED_ID_OFFSET : DAILY_TIMED_ID_OFFSET;
-        int currentID = offset == EVENT_TIMED_ID_OFFSET ? manager->m_currentEventID :
-            offset == WEEKLY_TIMED_ID_OFFSET ? manager->m_currentWeeklyID : manager->m_currentDailyID;
-        if (currentID > 0 && timedID == offset + currentID % TIMED_ID_RANGE_SIZE) return true;
+        auto type =
+            offset == EVENT_TIMED_ID_OFFSET ? GJTimedLevelType::Event
+            : offset == WEEKLY_TIMED_ID_OFFSET ? GJTimedLevelType::Weekly
+            : GJTimedLevelType::Daily;
+        int activeID = manager->getActiveDailyID(type);
+        if (activeID == timedID) return TimedRecallAccess::Playable;
 
         auto stats = GameStatsManager::sharedState();
-        return stats->isDailyRecall(timedID) || stats->hasCompletedDailyStars(timedID);
+        int currentID = offset == EVENT_TIMED_ID_OFFSET ? manager->m_currentEventID :
+            offset == WEEKLY_TIMED_ID_OFFSET ? manager->m_currentWeeklyID : manager->m_currentDailyID;
+        if (currentID == timedID || currentID == timedID - offset) {
+            // The timed popup saves the previously downloaded level until it is skipped or claimed //
+            if (activeID > offset && activeID < timedID && manager->getSavedDailyLevel(activeID) && !stats->hasCompletedDailyLevel(activeID)) {
+                return TimedRecallAccess::RequiresSkip;
+            }
+
+            return TimedRecallAccess::Playable;
+        }
+
+        return stats->isDailyRecall(timedID) || stats->hasCompletedDailyStars(timedID)
+            ? TimedRecallAccess::Playable : TimedRecallAccess::RequiresKeys;
     }
 
     bool unlockTimedRecall(int timedID) {
-        if (timedID <= 0) return false;
-        if (isTimedRecallUnlocked(timedID)) return true;
+        auto access = getTimedRecallAccess(timedID);
+        if (access == TimedRecallAccess::Playable) return true;
+        if (access != TimedRecallAccess::RequiresKeys) return false;
+
         auto stats = GameStatsManager::sharedState();
         int price = GameStatsManager::dailyRecallPrice(timedID);
         auto keyStat = std::to_string(static_cast<int>(StatKey::Keys));

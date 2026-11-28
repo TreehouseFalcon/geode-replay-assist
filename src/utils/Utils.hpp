@@ -25,9 +25,14 @@ namespace Utils {
 
     bool isRecallVariantCompleted(int levelID, LevelCategory category, int timedID = 0);
     bool hasUncompletedRecalls(GJGameLevel* level);
-    bool isTimedRecallUnlocked(int timedID);
+    enum class TimedRecallAccess {
+        Unavailable,
+        Playable,
+        RequiresKeys,
+        RequiresSkip
+    };
 
-    // Returns false if the ID is invalid or unlock cannot be afforded //
+    TimedRecallAccess getTimedRecallAccess(int timedID);
     bool unlockTimedRecall(int timedID);
 
     std::vector<GauntletType> getGauntletsForLevel(int levelID);

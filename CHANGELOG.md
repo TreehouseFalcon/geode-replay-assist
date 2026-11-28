@@ -1,4 +1,8 @@
-# v0.3.0
+# v0.3.1
+
+- Fix bug where you can play the current timed variant of a daily/weekly/event even if you're normally required to skip a previous one first
+
+## v0.3.0
 
 - Recently-minted timed levels (Daily, Weekly, Event) are now immediately detected on game launch if they are present on the first page of their respective safe. Gauntlet evaluation has also been reworked, so newly-released gauntlets should be immediately detectable on game launch as well
 - There is now a loading indicator displayed if some resources are still being loaded to determine the full set of available recalls for a level

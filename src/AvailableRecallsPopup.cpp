@@ -13,6 +13,21 @@
 #include <Geode/binding/CCSpriteGrayscale.hpp>
 #include <optional>
 #include <algorithm>
+#include <string_view>
+
+namespace {
+    void showTimedSkipPrompt(LevelCategory category) {
+        std::string_view categoryName =
+            category == LevelCategory::Daily ? "<cc>Daily</c>"
+            : category == LevelCategory::Weekly ? "<cl>Weekly</c>"
+            : category == LevelCategory::Event ? "<cd>Event</c>" : "";
+        if (!categoryName.empty()) {
+            geode::createQuickPopup("level locked",
+                fmt::format("Open the {} page and skip the level, or claim its reward first", categoryName),
+                "OK");
+        }
+    }
+}
 
 CCNode* AvailableRecallsPopup::createAvailableRecallContainer(LevelCategory levelCategory, std::optional<GauntletType> gauntlet, int timedID) {
     // Gauntlet containers require a specific gauntlet, other categories don't //
@@ -51,7 +66,7 @@ CCNode* AvailableRecallsPopup::createAvailableRecallContainer(LevelCategory leve
     auto playSprite = Utils::createRecallPlaySprite();
     // Reserve the same space for both play and lock icons //
     auto buttonSize = playSprite->getContentSize() * playSprite->getScale();
-    bool locked = (isTimed && !Utils::isTimedRecallUnlocked(timedID)) ||
+    bool locked = (isTimed && Utils::getTimedRecallAccess(timedID) != Utils::TimedRecallAccess::Playable) ||
         (levelCategory == LevelCategory::Gauntlet && !Utils::isGauntletRecallUnlocked(m_level, *gauntlet));
     if (locked) {
         playSprite = CCSprite::createWithSpriteFrameName("GJLargeLock_001.png");
@@ -208,7 +223,7 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
             return;
         }
         if (!Utils::isGauntletRecallUnlocked(m_level, *gauntlet)) {
-            geode::createQuickPopup("Level locked", "You have not <cy>discovered</c> this <co>gauntlet level</c> yet", "OK");
+            geode::createQuickPopup("level locked", "You have not <cy>discovered</c> this <co>gauntlet level</c> yet", "OK");
             return;
         }
     } else {
@@ -219,13 +234,23 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
             geode::createQuickPopup("Recall unavailable", "This timed appearance was not found in <cl>The Safe</c> cache for this level", "OK");
             return;
         }
-        if (!Utils::isTimedRecallUnlocked(timedID)) {
+        auto access = Utils::getTimedRecallAccess(timedID);
+        if (access == Utils::TimedRecallAccess::RequiresSkip) {
+            showTimedSkipPrompt(category);
+            return;
+        }
+        if (access == Utils::TimedRecallAccess::Unavailable) return;
+        if (access == Utils::TimedRecallAccess::RequiresKeys) {
             int price = GameStatsManager::dailyRecallPrice(timedID);
             m_unlockPopup = geode::createQuickPopup("Unlock Recall",
                 fmt::format("Unlock this recall for {} demon key{}?", price, price == 1 ? "" : "s"),
-                "Cancel", "Unlock", [timedID, button = Ref(button)](auto, bool confirmed) {
+                "Cancel", "Unlock", [timedID, category, button = Ref(button)](auto, bool confirmed) {
                     if (!confirmed) return;
                     if (!Utils::unlockTimedRecall(timedID)) {
+                        if (Utils::getTimedRecallAccess(timedID) == Utils::TimedRecallAccess::RequiresSkip) {
+                            showTimedSkipPrompt(category);
+                            return;
+                        }
                         geode::createQuickPopup("Not enough keys", "You need more demon keys to unlock this recall.", "OK");
                         return;
                     }
@@ -348,6 +373,20 @@ void AvailableRecallsPopup::openRecall(GJGameLevel* level, std::optional<Gauntle
     auto game = GameManager::sharedState();
     int previousGauntlet = game->m_currentGauntlet;
 
+    // Find the timed ID location to use for caching the level the player is sent to, only if there's not already one cached //
+    int timedID = level->m_dailyID.value();
+    int* activeTimedID = nullptr;
+    if (!level->m_gauntletLevel) {
+        auto manager = GameLevelManager::sharedState();
+        activeTimedID =
+            timedID > EVENT_TIMED_ID_OFFSET ? &manager->m_activeEventID
+            : timedID > WEEKLY_TIMED_ID_OFFSET ? &manager->m_activeWeeklyID
+            : &manager->m_activeDailyID;
+        if (*activeTimedID > 0) activeTimedID = nullptr;
+    }
+    int previousTimedID = activeTimedID ? *activeTimedID : 0;
+    if (activeTimedID) *activeTimedID = timedID;
+
     // LevelInfoLayer::onBack rebuilds GauntletLayer from this value //
     if (level->m_gauntletLevel && gauntlet) {
         game->m_currentGauntlet = static_cast<int>(*gauntlet);
@@ -355,7 +394,9 @@ void AvailableRecallsPopup::openRecall(GJGameLevel* level, std::optional<Gauntle
 
     auto scene = LevelInfoLayer::scene(level, false);
     if (!scene) {
+        // Revert if scene fails for some reason //
         game->m_currentGauntlet = previousGauntlet;
+        if (activeTimedID) *activeTimedID = previousTimedID;
         return;
     }
 
