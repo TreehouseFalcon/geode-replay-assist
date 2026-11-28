@@ -8,7 +8,7 @@
 	},
 	"id": "treehousefalcon.replay-recall-assist",
 	"name": "Replay Recall Assist",
-	"version": "v0.2.1",
+	"version": "v0.3.0",
 	"developer": "TreehouseFalcon",
 	"description": "Know when a level has recall/replay available",
 	"tags": [
