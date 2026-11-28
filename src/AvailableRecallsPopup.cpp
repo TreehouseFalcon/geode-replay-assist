@@ -20,7 +20,7 @@ CCNode* AvailableRecallsPopup::createAvailableRecallContainer(LevelCategory leve
     bool isTimed = levelCategory == LevelCategory::Daily || levelCategory == LevelCategory::Weekly || levelCategory == LevelCategory::Event;
     if (isTimed && timedID <= 0) return nullptr;
 
-    const char* categoryName = "online";
+    const char* categoryName = "browse";
     switch (levelCategory) {
         case LevelCategory::Daily: categoryName = "daily"; break;
         case LevelCategory::Weekly: categoryName = "weekly"; break;
