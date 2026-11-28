@@ -1,5 +1,6 @@
 #pragma once
 #include "../Constants.hpp"
+#include <Geode/Enums.hpp>
 #include <Geode/loader/Event.hpp>
 #include <optional>
 #include <string>
@@ -23,10 +24,12 @@ enum class InitialRecallLoad {
     DailyVault,
     WeeklyVault,
     EventVault,
+    DailyCurrentLevel,
+    WeeklyCurrentLevel,
+    EventCurrentLevel,
     Count, // this should always be last to size the bitset
 };
 
-// Sent on the game thread 10 seconds after each startup fetch has processed its result.
 struct InitialRecallLoadSettledEvent : geode::Event<InitialRecallLoadSettledEvent, bool()> {};
 
 struct OnlineLevelSearchFinishedEvent : geode::Event<OnlineLevelSearchFinishedEvent, bool(), std::string> {
@@ -38,6 +41,7 @@ void settleInitialRecallLoad(InitialRecallLoad load);
 
 void loadGauntletRecallEntries();
 void loadRecentTimedRecallEntries();
+int getFetchedCurrentTimedID(GJTimedLevelType type);
 void addTimedRecallEntry(SafeRecallEntry entry);
 SafeRecallCache const& getSafeRecallEntries();
 bool isSafeRecallDataLoaded();

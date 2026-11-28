@@ -1,6 +1,7 @@
 # v0.3.1
 
 - Fixes bug where you could play the current timed variant of a daily/weekly/event for free without skipping a previously cached level first
+- Fixes recently-minted timed levels check skipping the most recent level
 
 ## v0.3.0
 

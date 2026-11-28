@@ -261,7 +261,9 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
     }
 
     auto manager = GameLevelManager::sharedState();
-    auto savedLevel = isGauntlet ? Utils::getSavedGauntletLevel(levelID) : manager->getSavedDailyLevel(timedID);
+    auto savedLevel = isGauntlet ?
+        manager->getSavedGauntletLevel(levelID) :
+        manager->getSavedDailyLevel(timedID);
     auto matches = [&](GJGameLevel* level) {
         return level && level->m_levelID.value() == levelID &&
             level->m_dailyID.value() == timedID && level->m_gauntletLevel == isGauntlet;

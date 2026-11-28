@@ -1,7 +1,9 @@
 #include <Geode/Geode.hpp>
+#include <Geode/binding/DailyLevelPage.hpp>
 #include <Geode/binding/GJSearchObject.hpp>
 #include <Geode/binding/LevelBrowserLayer.hpp>
 #include <Geode/modify/GameLevelManager.hpp>
+#include <array>
 #include "../utils/NetUtils.hpp"
 
 using namespace geode::prelude;
@@ -13,18 +15,25 @@ namespace {
         LevelCategory category;
         int offset;
         NetUtils::InitialRecallLoad load;
+        NetUtils::InitialRecallLoad currentLevelLoad;
+        int currentLevelRequestID;
     };
 
+    // Each category fills the recall cache from its Vault page and current level.
     constexpr TimedSearch TIMED_SEARCHES[] = {
         {SearchType::DailyVault, GJTimedLevelType::Daily, LevelCategory::Daily,
-            DAILY_TIMED_ID_OFFSET, NetUtils::InitialRecallLoad::DailyVault},
+            DAILY_TIMED_ID_OFFSET, NetUtils::InitialRecallLoad::DailyVault,
+            NetUtils::InitialRecallLoad::DailyCurrentLevel, -1},
         {SearchType::WeeklyVault, GJTimedLevelType::Weekly, LevelCategory::Weekly,
-            WEEKLY_TIMED_ID_OFFSET, NetUtils::InitialRecallLoad::WeeklyVault},
+            WEEKLY_TIMED_ID_OFFSET, NetUtils::InitialRecallLoad::WeeklyVault,
+            NetUtils::InitialRecallLoad::WeeklyCurrentLevel, -2},
         {SearchType::EventVault, GJTimedLevelType::Event, LevelCategory::Event,
-            EVENT_TIMED_ID_OFFSET, NetUtils::InitialRecallLoad::EventVault},
+            EVENT_TIMED_ID_OFFSET, NetUtils::InitialRecallLoad::EventVault,
+            NetUtils::InitialRecallLoad::EventCurrentLevel, -3},
     };
 
     std::unordered_map<std::string, TimedSearch> s_pendingSearches;
+    std::array<int, std::size(TIMED_SEARCHES)> s_currentTimedIDs{};
 
     bool cacheTimedLevel(GJGameLevel* level, int timedID, TimedSearch const& search) {
         int levelID = level->m_levelID.value();
@@ -45,11 +54,24 @@ namespace {
         }
         return count;
     }
+
+    void searchCurrentTimedLevel(GameLevelManager* manager, TimedSearch const& search) {
+        auto key = fmt::format("{}_0_0", search.currentLevelRequestID);
+        if (s_pendingSearches.emplace(key, search).second) {
+            manager->downloadLevel(search.currentLevelRequestID, false, 0);
+        }
+    }
+}
+
+int NetUtils::getFetchedCurrentTimedID(GJTimedLevelType type) {
+    return s_currentTimedIDs[static_cast<size_t>(type)];
 }
 
 void NetUtils::loadRecentTimedRecallEntries() {
     auto manager = GameLevelManager::sharedState();
     for (auto search : TIMED_SEARCHES) {
+        searchCurrentTimedLevel(manager, search);
+
         // Creating a search object with just its type selects first page //
         auto query = GJSearchObject::create(search.type);
         std::string key = query->getKey();
@@ -69,6 +91,51 @@ void NetUtils::loadRecentTimedRecallEntries() {
 
 class $modify(RecallAssistTimedLevelManager, GameLevelManager) {
     void handleIt(bool success, std::string response, std::string tag, GJHttpType type) {
+        if (type == GJHttpType::DownloadLevel) {
+            auto search = s_pendingSearches.extract(tag);
+            if (!search.empty()) {
+                auto const& timed = search.mapped();
+                auto delegate = m_levelDownloadDelegate;
+            #ifdef GEODE_IS_MACOS
+                // No DailyLevelPage typeinfo on macOS :( //
+                auto page = std::string_view(geode::cast::getRuntimeTypeName(delegate)) == "14DailyLevelPage"
+                    ? static_cast<DailyLevelPage*>(delegate) : nullptr;
+            #else
+                auto page = geode::cast::typeinfo_cast<DailyLevelPage*>(delegate);
+            #endif
+                bool pageIsWaiting = page && page->m_downloadStarted &&
+                    page->m_downloadLevelID == timed.currentLevelRequestID;
+                int& activeID =
+                    timed.timedType == GJTimedLevelType::Daily ? m_activeDailyID
+                    : timed.timedType == GJTimedLevelType::Weekly ? m_activeWeeklyID
+                    : m_activeEventID;
+                int previousActiveID = activeID;
+                auto previousLevel = getSavedDailyLevel(previousActiveID);
+
+                // Forward the download only to the timed page waiting for it //
+                if (!pageIsWaiting) m_levelDownloadDelegate = nullptr;
+                GameLevelManager::handleIt(success, std::move(response), std::move(tag), type);
+
+                int timedID = activeID;
+                auto level = success ? getSavedDailyLevel(timedID) : nullptr;
+                if (!pageIsWaiting) {
+                    activeID = previousActiveID;
+                    if (!m_levelDownloadDelegate) {
+                        m_levelDownloadDelegate = delegate;
+                    }
+                }
+
+                bool cacheEntryChanged = timedID != previousActiveID || level != previousLevel;
+                bool matchesTimedID = level && level->m_dailyID.value() == timedID;
+                if (cacheEntryChanged && matchesTimedID && cacheTimedLevel(level, timedID, timed)) {
+                    s_currentTimedIDs[static_cast<size_t>(timed.timedType)] = timedID;
+                    log::info("found current timed level {} (ID={})", timedID, level->m_levelID.value());
+                }
+                NetUtils::settleInitialRecallLoad(timed.currentLevelLoad);
+                return;
+            }
+        }
+
         if (type != GJHttpType::GetOnlineLevels) {
             GameLevelManager::handleIt(success, std::move(response), std::move(tag), type);
             return;

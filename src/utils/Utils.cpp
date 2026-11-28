@@ -14,16 +14,6 @@
 using namespace geode::prelude;
 
 namespace Utils {
-    GJGameLevel* getSavedGauntletLevel(int levelID) {
-        auto manager = GameLevelManager::sharedState();
-    #ifdef GEODE_IS_MACOS
-        // macOS lacks this binding. The native cache uses decimal level IDs. //
-        return static_cast<GJGameLevel*>(manager->m_gauntletLevels->objectForKey(std::to_string(levelID)));
-    #else
-        return manager->getSavedGauntletLevel(levelID);
-    #endif
-    }
-
     std::vector<GauntletType> getGauntletsForLevel(int levelID) {
         auto packs = GameLevelManager::sharedState()->m_savedGauntlets;
         std::vector<GauntletType> gauntlets;
@@ -111,7 +101,9 @@ namespace Utils {
         auto stats = GameStatsManager::sharedState();
         int currentID = offset == EVENT_TIMED_ID_OFFSET ? manager->m_currentEventID :
             offset == WEEKLY_TIMED_ID_OFFSET ? manager->m_currentWeeklyID : manager->m_currentDailyID;
-        if (currentID == timedID || currentID == timedID - offset) {
+        if (currentID > 0 && currentID <= TIMED_ID_RANGE_SIZE) currentID += offset;
+        currentID = std::max(currentID, NetUtils::getFetchedCurrentTimedID(type));
+        if (currentID == timedID) {
             // The timed popup saves the previously downloaded level until it is skipped or claimed //
             if (activeID > offset && activeID < timedID && manager->getSavedDailyLevel(activeID) && !stats->hasCompletedDailyLevel(activeID)) {
                 return TimedRecallAccess::RequiresSkip;
@@ -198,7 +190,7 @@ namespace Utils {
         int levelID = sourceLevel->m_levelID.value();
         auto manager = GameLevelManager::sharedState();
         GJGameLevel* saved = isTimed ? manager->getSavedDailyLevel(timedID) :
-            category == LevelCategory::Gauntlet ? Utils::getSavedGauntletLevel(levelID) :
+            category == LevelCategory::Gauntlet ? manager->getSavedGauntletLevel(levelID) :
             manager->getSavedLevel(levelID);
         auto matchesVariant = [&](GJGameLevel* level) {
             if (!level || level->m_levelID.value() != levelID) return false;

@@ -36,7 +36,6 @@ namespace Utils {
     bool unlockTimedRecall(int timedID);
 
     std::vector<GauntletType> getGauntletsForLevel(int levelID);
-    GJGameLevel* getSavedGauntletLevel(int levelID);
     bool isGauntletRecallUnlocked(GJGameLevel* sourceLevel, GauntletType gauntlet);
     int getRecallProgress(GJGameLevel* sourceLevel, LevelCategory category, int timedID = 0);
 }
