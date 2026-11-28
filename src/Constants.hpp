@@ -10,6 +10,11 @@ enum class LevelCategory {
     Default
 };
 
+inline constexpr int TIMED_ID_RANGE_SIZE = 100000;
+inline constexpr int DAILY_TIMED_ID_OFFSET = 0;
+inline constexpr int WEEKLY_TIMED_ID_OFFSET = 100000;
+inline constexpr int EVENT_TIMED_ID_OFFSET = 200000;
+
 inline const std::map<LevelCategory, const char*> LEVEL_CATEGORY_TO_SPRITE = {
     {LevelCategory::Daily, "gj_dailyCrown_001.png"},
     {LevelCategory::Weekly, "gj_weeklyCrown_001.png"},

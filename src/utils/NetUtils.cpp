@@ -2,6 +2,9 @@
 #include <Geode/Geode.hpp>
 #include <Geode/utils/async.hpp>
 #include <Geode/utils/web.hpp>
+#include <arc/time/Sleep.hpp>
+#include <algorithm>
+#include <bitset>
 #include <charconv>
 #include <string_view>
 
@@ -11,6 +14,7 @@ namespace NetUtils {
 namespace {
     bool s_safeRecallDataLoaded = false;
     SafeRecallCache s_safeRecallEntries;
+    std::bitset<static_cast<size_t>(InitialRecallLoad::Count)> s_settledInitialLoads;
 
     // Ensure that the expected values in the sheet are actually positive ints //
     std::optional<int> parsePositiveInteger(std::string_view text) {
@@ -39,15 +43,15 @@ namespace {
         int offset;
         if (label.starts_with("Daily #")) {
             category = LevelCategory::Daily;
-            offset = 0;
+            offset = DAILY_TIMED_ID_OFFSET;
             label.remove_prefix(7);
         } else if (label.starts_with("Weekly #")) {
             category = LevelCategory::Weekly;
-            offset = 100000;
+            offset = WEEKLY_TIMED_ID_OFFSET;
             label.remove_prefix(8);
         } else if (label.starts_with("Event #")) {
             category = LevelCategory::Event;
-            offset = 200000;
+            offset = EVENT_TIMED_ID_OFFSET;
             label.remove_prefix(7);
         } else {
             return;
@@ -55,7 +59,7 @@ namespace {
 
         // Reject whitespace, suffixes, signs, leading zeros, and category overflow.
         auto number = parsePositiveInteger(label);
-        if (!number || *number > 100000) return;
+        if (!number || *number > TIMED_ID_RANGE_SIZE) return;
         entries.push_back({columns[0], *levelID, category, offset + *number});
     }
 
@@ -119,45 +123,57 @@ namespace {
         return entries;
     }
 
-    void fetchSpreadsheet(
-        async::TaskHolder<web::WebResponse>& request, std::string sheet, std::string range,
-        geode::Function<void(std::string_view)> onLoaded
-    ) {
-        log::info("loading spreadsheet {} data", sheet);
-        auto fetch = web::WebRequest().timeout(asp::Duration::fromSecs(30))
-            .param("tqx", "out:csv").param("sheet", sheet).param("range", range);
-        request.spawn(fetch.get(RECALL_SPREADSHEET_URL),
-            [sheet, onLoaded = std::move(onLoaded)](web::WebResponse response) mutable {
-                if (!response.ok()) {
-                    log::warn("{} request failed (HTTP {}): {}", sheet, response.code(), response.errorMessage());
-                    return;
-                }
-                auto text = response.string();
-                if (!text) {
-                    log::warn("could not read {} response: {}", sheet, text.unwrapErr());
-                    return;
-                }
-                onLoaded(text.unwrap());
-            });
+    void storeSpreadsheetRecallEntries(web::WebResponse const& response) {
+        if (!response.ok()) {
+            log::warn("The Safe request failed (HTTP {}): {}", response.code(), response.errorMessage());
+            return;
+        }
+        auto text = response.string();
+        if (!text) {
+            log::warn("could not read The Safe response: {}", text.unwrapErr());
+            return;
+        }
+        auto entries = parseSafeRecallCSV(text.unwrap());
+        if (!entries || entries->empty()) {
+            log::warn("Safe response contained no valid recall data or invalid CSV");
+            return;
+        }
+
+        for (auto& entry : *entries) {
+            addTimedRecallEntry(std::move(entry));
+        }
+        s_safeRecallDataLoaded = true;
+        log::info("cached {} timed recall rows for {} levels", entries->size(), s_safeRecallEntries.size());
     }
 
     void loadSafeRecallEntries() {
         static async::TaskHolder<web::WebResponse> request;
-        fetchSpreadsheet(request, "The Safe", "A:O", [](std::string_view csv) {
-            auto entries = parseSafeRecallCSV(csv);
-            if (!entries || entries->empty()) {
-                log::warn("Safe response contained no valid recall data or invalid CSV");
-                return;
-            }
-
-            SafeRecallCache cache;
-            for (auto& entry : *entries) {
-                cache[entry.levelID].push_back(std::move(entry));
-            }
-            s_safeRecallEntries = std::move(cache);
-            s_safeRecallDataLoaded = true;
-            log::info("cached {} timed recall rows for {} levels", entries->size(), s_safeRecallEntries.size());
+        log::info("loading spreadsheet The Safe data");
+        auto fetch = web::WebRequest().timeout(asp::Duration::fromSecs(30))
+            .param("tqx", "out:csv").param("sheet", "The Safe").param("range", "A:O");
+        request.spawn(fetch.get(RECALL_SPREADSHEET_URL), [](web::WebResponse response) {
+            storeSpreadsheetRecallEntries(response);
+            settleInitialRecallLoad(InitialRecallLoad::Spreadsheet);
         });
+    }
+}
+
+bool areInitialRecallLoadsSettled() {
+    return s_settledInitialLoads.all();
+}
+
+void settleInitialRecallLoad(InitialRecallLoad load) {
+    auto index = static_cast<size_t>(load);
+    if (s_settledInitialLoads.test(index)) return;
+    s_settledInitialLoads.set(index);
+    InitialRecallLoadSettledEvent().send();
+}
+
+void addTimedRecallEntry(SafeRecallEntry entry) {
+    auto& entries = s_safeRecallEntries[entry.levelID];
+    auto existing = std::ranges::find(entries, entry.timedID, &SafeRecallEntry::timedID);
+    if (existing == entries.end()) {
+        entries.push_back(std::move(entry));
     }
 }
 
@@ -188,6 +204,7 @@ $on_mod(Loaded) {
     queueInMainThread([] {
         loadSafeRecallEntries();
         loadGauntletRecallEntries();
+        loadRecentTimedRecallEntries();
     });
 }
 

@@ -96,10 +96,11 @@ namespace Utils {
 
         // The current timed appearance is free, only older recalls require keys //
         auto manager = GameLevelManager::sharedState();
-        int offset = timedID > 200000 ? 200000 : timedID > 100000 ? 100000 : 0;
-        int currentID = offset == 200000 ? manager->m_currentEventID :
-            offset == 100000 ? manager->m_currentWeeklyID : manager->m_currentDailyID;
-        if (currentID > 0 && timedID == offset + currentID % 100000) return true;
+        int offset = timedID > EVENT_TIMED_ID_OFFSET ? EVENT_TIMED_ID_OFFSET :
+            timedID > WEEKLY_TIMED_ID_OFFSET ? WEEKLY_TIMED_ID_OFFSET : DAILY_TIMED_ID_OFFSET;
+        int currentID = offset == EVENT_TIMED_ID_OFFSET ? manager->m_currentEventID :
+            offset == WEEKLY_TIMED_ID_OFFSET ? manager->m_currentWeeklyID : manager->m_currentDailyID;
+        if (currentID > 0 && timedID == offset + currentID % TIMED_ID_RANGE_SIZE) return true;
 
         auto stats = GameStatsManager::sharedState();
         return stats->isDailyRecall(timedID) || stats->hasCompletedDailyStars(timedID);

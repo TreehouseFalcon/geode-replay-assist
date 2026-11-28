@@ -7,24 +7,28 @@ using namespace geode::prelude;
 
 namespace {
     constexpr auto GAUNTLET_REQUEST_TAG = "get_gauntlets";
-    bool s_prefetchingGauntlets = false;
+    enum class GauntletLoad { Inactive, Existing, Prefetch };
+    GauntletLoad s_gauntletLoad = GauntletLoad::Inactive;
 }
 
 void NetUtils::loadGauntletRecallEntries() {
     auto manager = GameLevelManager::sharedState();
     if (manager->m_downloadObjects->objectForKey(GAUNTLET_REQUEST_TAG)) {
+        s_gauntletLoad = GauntletLoad::Existing;
         log::info("gauntlet request already in progress");
         return;
     }
 
     log::info("requesting gauntlets through vanilla loader");
-    s_prefetchingGauntlets = true;
+    s_gauntletLoad = GauntletLoad::Prefetch;
     manager->getGauntlets();
 }
 
 class $modify(RecallAssistGameLevelManager, GameLevelManager) {
     void onGetGauntletsCompleted(std::string response, std::string tag) {
-        bool prefetch = tag == GAUNTLET_REQUEST_TAG && std::exchange(s_prefetchingGauntlets, false);
+        auto load = tag == GAUNTLET_REQUEST_TAG
+            ? std::exchange(s_gauntletLoad, GauntletLoad::Inactive) : GauntletLoad::Inactive;
+        bool prefetch = load == GauntletLoad::Prefetch;
 
         // Make sure this unrelated request isn't consumed by gauntlet screen //
         auto delegate = m_levelManagerDelegate;
@@ -33,5 +37,8 @@ class $modify(RecallAssistGameLevelManager, GameLevelManager) {
         GameLevelManager::onGetGauntletsCompleted(std::move(response), std::move(tag));
         if (suppressDelegate && !m_levelManagerDelegate) m_levelManagerDelegate = delegate;
         if (prefetch) log::info("game gauntlet request completed with {} cached lineups", m_savedGauntlets->count());
+        if (load != GauntletLoad::Inactive) {
+            NetUtils::settleInitialRecallLoad(NetUtils::InitialRecallLoad::Gauntlets);
+        }
     }
 };

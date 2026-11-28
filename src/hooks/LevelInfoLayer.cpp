@@ -1,11 +1,11 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/LevelInfoLayer.hpp>
-#if !defined(GEODE_IS_IOS) && !defined(GEODE_IS_MACOS)
 #include <Geode/modify/LevelLeaderboard.hpp>
-#endif
 #include <Geode/binding/GameManager.hpp>
 #include <Geode/loader/SettingV3.hpp>
+#include <Geode/ui/LoadingSpinner.hpp>
 #include "../AvailableRecallsPopup.hpp"
+#include "../utils/NetUtils.hpp"
 #include "../utils/Utils.hpp"
 #include <algorithm>
 
@@ -29,8 +29,8 @@ class $modify(RecallAssistLevelInfoLayer, LevelInfoLayer) {
             return false;
         }
 
-        auto options = Utils::getAvailableRecallOptions(level);
-        if (options.empty()) return true;
+        bool loading = !NetUtils::areInitialRecallLoadsSettled();
+        if (!loading && Utils::getAvailableRecallOptions(level).empty()) return true;
         auto menu = this->getChildByID("death-tracker-menu");
         if (!menu) {
             log::warn("could not find mount point for available recalls button. Is geode.node-ids enabled?");
@@ -39,22 +39,57 @@ class $modify(RecallAssistLevelInfoLayer, LevelInfoLayer) {
 
         auto buttonSprite = CCSprite::createWithSpriteFrameName("GJ_plainBtn_001.png");
         buttonSprite->setScale(0.5f);
+        auto button = CCMenuItemSpriteExtra::create(
+            buttonSprite, this, menu_selector(RecallAssistLevelInfoLayer::onRecallAssist)
+        );
+        button->setID("recall-assist-button"_spr);
+        menu->addChild(button);
+
+        if (loading) {
+            button->setEnabled(false);
+            buttonSprite->setVisible(false);
+            auto spinner = geode::LoadingSpinner::create(button->getContentSize().height);
+            if (spinner) {
+                spinner->setID("recall-assist-loading"_spr);
+                button->addChildAtPosition(spinner, Anchor::Center);
+            }
+
+            this->addEventListener(NetUtils::InitialRecallLoadSettledEvent(),
+                [this, button = WeakRef(button), spinner = WeakRef(spinner)] {
+                    if (!NetUtils::areInitialRecallLoadsSettled()) return;
+
+                    auto item = button.lock();
+                    if (!item || !item->getParent()) return;
+                    if (Utils::getAvailableRecallOptions(m_level).empty()) {
+                        auto menu = item->getParent();
+                        item->removeFromParent();
+                        menu->updateLayout();
+                        return;
+                    }
+
+                    if (auto loadingSpinner = spinner.lock();
+                        loadingSpinner && loadingSpinner->getParent() == item.data()) {
+                        loadingSpinner->removeFromParent();
+                    }
+                    item->setEnabled(true);
+                    auto background = static_cast<CCSprite*>(item->getNormalImage());
+                    background->setVisible(true);
+                    initializeRecallButton(background);
+                });
+        } else {
+            initializeRecallButton(buttonSprite);
+        }
+        menu->updateLayout();
+        return true;
+    }
+
+    void initializeRecallButton(CCSprite* buttonSprite) {
         m_fields->m_recallBackground = buttonSprite;
         updateRecallEntryIcon();
         updateRecallIndicator();
         m_fields->m_indicatorSettingListener = SettingChangedEventV3(
             Mod::get(), "show-recall-indicator"
         ).listen([this](std::shared_ptr<SettingV3>) { updateRecallIndicator(); });
-
-        auto button = CCMenuItemSpriteExtra::create(
-            buttonSprite, this, menu_selector(RecallAssistLevelInfoLayer::onRecallAssist)
-        );
-        button->setID("recall-assist-button"_spr);
-
-        menu->addChild(button);
-        menu->updateLayout();
-
-        return true;
     }
 
     void onEnterTransitionDidFinish() {
@@ -151,12 +186,10 @@ void markRecallPage(LevelInfoLayer* layer) {
 }
 
 /*
-    LevelLeaderboard::loadScores not available through iOS bindings yet.
     This is a bugfix to allow Online <-> Timed variant leaderboard opens to
     publish & fetch scores without manually refreshing the leaderboard.
     In 2.209, these leaderboards are separate.
 */
-#if !defined(GEODE_IS_IOS) && !defined(GEODE_IS_MACOS)
 class $modify(RecallAssistLevelLeaderboard, LevelLeaderboard) {
     void loadScores() {
         if (m_level && m_type != LevelLeaderboardType::Local) {
@@ -184,4 +217,3 @@ class $modify(RecallAssistLevelLeaderboard, LevelLeaderboard) {
         LevelLeaderboard::loadScores();
     }
 };
-#endif
