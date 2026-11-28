@@ -19,7 +19,7 @@ namespace Utils {
 
     std::vector<RecallOption> getAvailableRecallOptions(GJGameLevel* level);
 
-    std::string getRecallSpriteName(LevelCategory category, std::optional<GauntletType> gauntlet = std::nullopt);
+    std::string getRecallSpriteName(GJGameLevel* sourceLevel, LevelCategory category, std::optional<GauntletType> gauntlet = std::nullopt);
     cocos2d::CCRect getSpriteVisibleBounds(cocos2d::CCSprite* sprite);
     cocos2d::CCSprite* createRecallPlaySprite();
 

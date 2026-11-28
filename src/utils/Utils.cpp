@@ -1,6 +1,7 @@
 #include "NetUtils.hpp"
 #include "Utils.hpp"
 #include "../Constants.hpp"
+#include <Geode/Enums.hpp>
 #include <Geode/Geode.hpp>
 #include <Geode/binding/GauntletNode.hpp>
 #include <Geode/binding/GameLevelManager.hpp>
@@ -82,13 +83,16 @@ namespace Utils {
         return options;
     }
 
-    std::string getRecallSpriteName(LevelCategory category, std::optional<GauntletType> gauntlet) {
+    std::string getRecallSpriteName(GJGameLevel* sourceLevel, LevelCategory category, std::optional<GauntletType> gauntlet) {
         if (category == LevelCategory::Gauntlet || category == LevelCategory::Default) {
             CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("GauntletSheet.plist");
         }
-        return category == LevelCategory::Gauntlet
-            ? GauntletNode::frameForType(gauntlet.value())
-            : LEVEL_CATEGORY_TO_SPRITE.at(category);
+        if (category == LevelCategory::Gauntlet) {
+            return isGauntletRecallUnlocked(sourceLevel, gauntlet.value())
+                ? GauntletNode::frameForType(*gauntlet)
+                : UNDISCOVERED_GAUNTLET_SPRITE;
+        }
+        return LEVEL_CATEGORY_TO_SPRITE.at(category);
     }
 
     bool isTimedRecallUnlocked(int timedID) {

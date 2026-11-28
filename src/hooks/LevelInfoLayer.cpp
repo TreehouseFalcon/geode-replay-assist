@@ -129,7 +129,7 @@ class $modify(RecallAssistLevelInfoLayer, LevelInfoLayer) {
             return !Utils::isRecallVariantCompleted(m_level->m_levelID.value(), option.category, option.timedID);
         });
         auto const& entryIcon = featuredReplayOption != options.end() ? *featuredReplayOption : options.front();
-        auto iconName = Utils::getRecallSpriteName(entryIcon.category, entryIcon.gauntlet);
+        auto iconName = Utils::getRecallSpriteName(m_level, entryIcon.category, entryIcon.gauntlet);
         if (iconName == m_fields->m_recallIconName) return;
 
         // Fit and center the visible artwork, excluding trimmed frame margins //

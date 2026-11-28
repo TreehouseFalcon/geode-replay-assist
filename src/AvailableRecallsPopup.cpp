@@ -34,12 +34,15 @@ CCNode* AvailableRecallsPopup::createAvailableRecallContainer(LevelCategory leve
         label->setScale(80.f / label->getContentSize().width);
     }
 
-    auto spriteName = Utils::getRecallSpriteName(levelCategory, gauntlet);
+    auto spriteName = Utils::getRecallSpriteName(m_level, levelCategory, gauntlet);
+    bool undiscoveredGauntlet = levelCategory == LevelCategory::Gauntlet &&
+        !Utils::isGauntletRecallUnlocked(m_level, *gauntlet);
     bool completed = Utils::isRecallVariantCompleted(m_level->m_levelID.value(), levelCategory, timedID);
-    CCSprite* sprite = completed
+    bool dimArtwork = completed || undiscoveredGauntlet;
+    CCSprite* sprite = dimArtwork
         ? CCSpriteGrayscale::createWithSpriteFrameName(spriteName)
         : CCSprite::createWithSpriteFrameName(spriteName.c_str());
-    if (completed) {
+    if (dimArtwork) {
         sprite->setColor({128, 128, 128});
     }
     sprite->setScale(0.75);
@@ -77,7 +80,14 @@ CCNode* AvailableRecallsPopup::createAvailableRecallContainer(LevelCategory leve
         -bounds.getMinY() * sprite->getScaleY()
     });
     spriteSlot->addChild(sprite);
-    if (completed) {
+    if (undiscoveredGauntlet) {
+        CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("GJ_GameSheet03.plist");
+        auto lockOverlay = CCSpriteGrayscale::createWithSpriteFrameName("GJLargeLock_001.png");
+        lockOverlay->setColor({128, 128, 128});
+        lockOverlay->setScale(0.4f);
+        lockOverlay->setPosition({containerWidth / 2.f, spriteSlotHeight / 2.f + 12});
+        spriteSlot->addChild(lockOverlay, 1);
+    } else if (completed) {
         CCSpriteFrameCache::sharedSpriteFrameCache()->addSpriteFramesWithFile("GJ_GameSheet03.plist");
         auto completedIcon = CCSprite::createWithSpriteFrameName("GJ_completesIcon_001.png");
         completedIcon->setPosition({containerWidth / 2.f, spriteSlotHeight / 2.f});
@@ -192,7 +202,7 @@ void AvailableRecallsPopup::onPlayRecall(CCObject* sender) {
             return;
         }
         if (!Utils::isGauntletRecallUnlocked(m_level, *gauntlet)) {
-            geode::createQuickPopup("Level locked", "You have not <cy>discovered</c> this gauntlet level yet", "OK");
+            geode::createQuickPopup("Level locked", "You have not <cy>discovered</c> this <co>gauntlet level</c> yet", "OK");
             return;
         }
     } else if (!isOnline) {

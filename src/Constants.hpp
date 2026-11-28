@@ -22,6 +22,7 @@ inline const std::map<LevelCategory, const char*> LEVEL_CATEGORY_TO_SPRITE = {
     {LevelCategory::Gauntlet, "theTowerDoor_001.png"},
     {LevelCategory::Default, "island_new31_001.png"}
 };
+inline const auto UNDISCOVERED_GAUNTLET_SPRITE = "island_new25_001.png";
 
 inline constexpr auto RECALL_SPREADSHEET_URL =
     "https://docs.google.com/spreadsheets/d/"

@@ -3,6 +3,7 @@
 - Recently-minted timed levels (Daily, Weekly, Event) are now immediately detected on game launch if they are present on the first page of their respective safe
 - There is now a loading indicator displayed if some resources are still being loaded to determine the full set of available recalls for a level
 - Renamed "Online" recall variant to "Browse"
+- Undiscovered gauntlet variants render the same sprite to prevent spoilers
 
 ## v0.2.0
 
