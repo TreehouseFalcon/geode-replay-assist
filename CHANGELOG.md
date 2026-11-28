@@ -1,6 +1,6 @@
 # v0.3.1
 
-- Fix bug where you can play the current timed variant of a daily/weekly/event even if you're normally required to skip a previous one first
+- Fixes bug where you could play the current timed variant of a daily/weekly/event for free without skipping a previously cached level first
 
 ## v0.3.0
 
